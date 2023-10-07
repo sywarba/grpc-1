@@ -11,7 +11,9 @@ class HelloReply(_message.Message):
     def __init__(self, message: _Optional[str] = ...) -> None: ...
 
 class HelloRequest(_message.Message):
-    __slots__ = ["name"]
+    __slots__ = ["language", "name"]
+    LANGUAGE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
+    language: str
     name: str
-    def __init__(self, name: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., language: _Optional[str] = ...) -> None: ...
