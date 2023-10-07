@@ -1,32 +1,10 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
 #include <iostream>
 #include <memory>
 #include <string>
 
 #include <grpcpp/grpcpp.h>
 
-#ifdef BAZEL_BUILD
-#include "examples/protos/helloworld.grpc.pb.h"
-#else
 #include "helloworld.grpc.pb.h"
-#endif
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -35,35 +13,49 @@ using helloworld::Greeter;
 using helloworld::HelloReply;
 using helloworld::HelloRequest;
 
+
 class GreeterClient {
  public:
   GreeterClient(std::shared_ptr<Channel> channel)
       : stub_(Greeter::NewStub(channel)) {}
 
-  // Assembles the client's payload, sends it and presents the response back
-  // from the server.
-  std::string SayHello(const std::string& user) {
-    // Data we are sending to the server.
+  std::string SayHello(const std::string& name, const std::string& language) {
     HelloRequest request;
-    request.set_name(user);
+    request.set_name(name);
+    request.set_language(language);
 
-    // Container for the data we expect from the server.
     HelloReply reply;
-
-    // Context for the client. It could be used to convey extra information to
-    // the server and/or tweak certain RPC behaviors.
     ClientContext context;
 
-    // The actual RPC.
     Status status = stub_->SayHello(&context, request, &reply);
 
-    // Act upon its status.
     if (status.ok()) {
       return reply.message();
     } else {
-      std::cout << status.error_code() << ": " << status.error_message()
-                << std::endl;
-      return "RPC failed";
+      std::cout << "RPC failed with error code: " << status.error_code()
+                << ", message: " << status.error_message() << std::endl;
+      return "";
+    }
+  }
+
+  void SayHelloStream(const std::string& name, const std::string& language) {
+    HelloRequest request;
+    request.set_name(name);
+    request.set_language(language);
+
+    ClientContext context;
+    std::unique_ptr<grpc::ClientReader<HelloReply> > reader(
+        stub_->SayHelloStream(&context, request));
+
+    HelloReply reply;
+    while (reader->Read(&reply)) {
+      std::cout << reply.message() << std::endl;
+    }
+
+    Status status = reader->Finish();
+    if (!status.ok()) {
+      std::cout << "RPC failed with error code: " << status.error_code()
+                << ", message: " << status.error_message() << std::endl;
     }
   }
 
@@ -71,38 +63,44 @@ class GreeterClient {
   std::unique_ptr<Greeter::Stub> stub_;
 };
 
-int main(int argc, char** argv) {
-  // Instantiate the client. It requires a channel, out of which the actual RPCs
-  // are created. This channel models a connection to an endpoint specified by
-  // the argument "--target=" which is the only expected argument.
-  // We indicate that the channel isn't authenticated (use of
-  // InsecureChannelCredentials()).
-  std::string target_str;
-  std::string arg_str("--target");
-  if (argc > 1) {
-    std::string arg_val = argv[1];
-    size_t start_pos = arg_val.find(arg_str);
-    if (start_pos != std::string::npos) {
-      start_pos += arg_str.size();
-      if (arg_val[start_pos] == '=') {
-        target_str = arg_val.substr(start_pos + 1);
-      } else {
-        std::cout << "The only correct argument syntax is --target="
-                  << std::endl;
-        return 0;
-      }
-    } else {
-      std::cout << "The only acceptable argument is --target=" << std::endl;
-      return 0;
-    }
-  } else {
-    target_str = "localhost:50051";
-  }
+void Run() {
+  std::string target_str = "localhost:50051";
   GreeterClient greeter(
       grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-  std::string user("world");
-  std::string reply = greeter.SayHello(user);
-  std::cout << "Greeter received: " << reply << std::endl;
 
+  std::cout << "Will try to greet world ..." << std::endl;
+
+  std::string method;
+  std::cout << "Which method do you want to call? (1 for SayHello, 2 for SayHelloStream): ";
+  std::cin >> method;
+
+  std::string name;
+  std::cout << "What's your name? ";
+  std::cin >> name;
+
+  std::string language;
+  while (true) {
+    std::cout << "What's your preferred language? (ENGLISH, FRENCH, ARABIC): ";
+    std::cin >> language;
+
+    if (language == "ENGLISH" || language == "FRENCH" || language == "ARABIC") {
+      break;
+    } else {
+      std::cout << "Invalid language. Please enter one of ENGLISH, FRENCH, or ARABIC." << std::endl;
+    }
+  }
+
+  if (method == "1") {
+    std::string message = greeter.SayHello(name, language);
+    std::cout << message << std::endl;
+  } else if (method == "2") {
+    greeter.SayHelloStream(name, language);
+  } else {
+    std::cout << "Invalid choice. Please enter 1 or 2." << std::endl;
+  }
+}
+
+int main(int argc, char** argv) {
+  Run();
   return 0;
 }
